@@ -17,7 +17,7 @@ def unique_rows(arr):
 
 def detectKepyPoints(img, octLayer, consTh, sigm):
     # find the keypoints and descriptors with SIFT
-    OcLayer = int (octLayer)
+    OcLayer = int(octLayer)
     detector = cv2.xfeatures2d.SIFT_create(nOctaveLayers = OcLayer, contrastThreshold = consTh, sigma = sigm)
     kp = detector.detect(img)
     return kp
@@ -103,16 +103,20 @@ def compute_transformations(C, p, p1, min_cluster_pts):
 
 
             if (len(z1) > min_cluster_pts) and (len(z2) > min_cluster_pts):
-                M,_ = cv2.findHomography(z1, z2, cv2.RANSAC, 5.0)
+                (M, mask) = cv2.findHomography(z1, z2, cv2.RANSAC, 5.0)
 
-               # print('\n')
-               # print(M)
 
-                if (np.any(M) != None)  and (len(M) != 0):
+
+                #----------output inlier and outlier ----------
+                #print(mask),
+                #print(mask.size)
+                for i in range(mask.size):
+                    if mask[i] != 0:
                         num_gt = num_gt + 1
-                elif (np.any(M) != None) and (len(M) == 0):
+                    elif mask[i] == 0:
                         num_ft = num_ft + 1
-                else: num_missft = num_missft + 1
+                    else:
+                        num_missft = num_missft + 1
 
     return num_gt, num_ft
 
@@ -146,7 +150,7 @@ class PSOinit:
 
     # maximum ( Pmatch )
     # => minimum (1 / Pmatch)
-    # Pmatch min = GoodMatchingKeypoints / GoodMatchingKeypoints + Threshold
+    # Pmatch max = GoodMatchingKeypoints / GoodMatchingKeypoints + Threshold
 
 
     # mininum fitness( Pmatch )
@@ -160,6 +164,7 @@ class PSOinit:
         if len(p1) == 0:
             return 0
         else:
+
             p = np.vstack((p1, p2))
 
             # Hierarchical Agglomerative Clustering
@@ -167,17 +172,24 @@ class PSOinit:
 
             # Compute number of transformations
             num_gt, num_ft = compute_transformations(C, p, p1, min_cluster_pts)
+
+            print('-------Pmatch----------')
             print(num_gt)
+
             print(num_ft)
-            Pmatch = 0
-        if num_ft <= 10:
+            print('-------End Pmatch----------')
+            if num_ft <= 10:
                 temp = num_gt + 10
-                Pmatch = float(num_gt / temp)
-        else:   Pmatch = float(num_gt / num_gt + num_ft)
+                Pmatch = num_gt / float (temp)
+
+            else:
+                if num_gt !=0:
+                    Pmatch = num_gt / float(num_gt + num_ft)
+                else:
+                    Pmatch = 0
 
 
-
-        return Pmatch
+        self.p_best_fitness = Pmatch
 
 
   # assign random positions and velocities to the particles
@@ -216,7 +228,7 @@ def result():
     c2 = 0.729
     nPop = 20           # number of particle
     D = 3               # dimension
-    max_iter = 100
+    max_iter = 1
     Lower_pos = [3, 0.0001, 1.00] # octLayer consTh sigm
     Upper_pos = [6, 0.1000, 2.00] # octLayer consTh sigm
 
@@ -232,6 +244,7 @@ def result():
         if Bestcurrent.p_best_fitness > Best.p_best_fitness:
             Best = copy.deepcopy(Bestcurrent)
         print(Best.g_best_fitness)
+        #print('------------------------')
         for j in range(nPop):
             for k in range(D):
                  # calculate new velocity and set it in the [min, max] range
@@ -239,23 +252,30 @@ def result():
                 if abs(Pparent[j].velocity[k]) > vmax:
                     if Pparent[j].velocity[k] > 0:
                         Pparent[j].velocity[k] = vmax
+                    else:
+                        Pparent[j].velocity[k] = -vmax
 
                 if abs(Pparent[j].velocity[k]) < -vmax:
                     if Pparent[j].velocity[k] < 0:
                         Pparent[j].velocity[k] = -vmax
+                    else:
+                        Pparent[j].pop_pos[k] = -vmax
 
                      # calculate new positions and set it in the [min, max] range
                 Pparent[j].pop_pos[k] += Pparent[j].velocity[k]
+                #print(Pparent[j].pop_pos[k])
 
                 if Pparent[j].pop_pos[k] > Upper_pos[k] or Pparent[j].pop_pos[k] < Lower_pos[k]:
                          Pparent[j].pop_pos[k] = random.uniform(Lower_pos[k], Upper_pos[k])
+            #print('\n')
             temp = copy.deepcopy(Pparent[j])
             Pparent[j].minPmatch(img, metric, th, min_cluster_pts)
             if Pparent[j].p_best_fitness > Pparent[j].g_best_fitness:
                            Pparent[j].g_best_fitness = Pparent[j].p_best_fitness
                            Pparent[j].g_best_pos = copy.deepcopy(Pparent[j].pop_pos)
-                           print(Pparent[j].g_best_pos)
-
+    print('---------------PSO Gbest------------------')
+    print(Best.g_best_pos)
+    print(Best.g_best_fitness)
 
 if __name__ == '__main__':
     result()
